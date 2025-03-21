@@ -1,4 +1,9 @@
--- CREATE TABLE inventorysandbox.dbo.RFP_InventoryModelDomestic (
+-- UPDATE FROM TESTING -> CHANGE ALL .dbo to .DBO
+-- DIFFERENCES FROM CURRENT:
+--    _Curr ent_ to _Simulation_Daily_
+--    Replace the task name at top and bottom call with Simulation_Daily
+
+-- CREATE TABLE inventorysandbox.dbo.RFP_Simulation_Daily_InventoryModelDomestic (
 --     partnumber VARCHAR(255),
 --     itemid BIGINT,
 --     state VARCHAR(50),
@@ -25,17 +30,18 @@
 
 -- Reach out to Justin to get specific WH to run this job, be snowpark and auto suspend after use
 
--- DROP TABLE inventorysandbox.dbo.RFP_InventoryModelDomestic;
--- DROP TABLE inventorysandbox.dbo.RFP_InventoryModelV2
+-- DROP TABLE inventorysandbox.dbo.RFP_Simulation_Daily_InventoryModelDomestic;
+-- DROP TABLE inventorysandbox.dbo.RFP_Simulation_Daily_InventoryModelV2
 
-create or replace task Step_7C_RFPGen_Simulation_Daily
-    warehouse = IBOPTIMIZATION_WH
-    as begin
 
 --Query Summary Guide Available here: https://vminnovations.sharepoint.com/:w:/s/inventoryoperations/EVOTBpiEvUdJvFkrN3s4pBoBjryoYBMZLY_05atBHUIH0w?e=s4iOC8
 --Developer: Erik R/John R
 --Validation: 
 --Last Updated: 10/9/2024 by Erik R
+
+create or replace task Step_7C_RFPGen_Simulation_Daily
+    warehouse = IBOPTIMIZATION_WH
+    as begin
 
 create or replace temp table fc_states as (
         select distinct
@@ -64,7 +70,7 @@ create or replace temp table Cumulative_Calc as (
             LEFT JOIN (SELECT ITEMID, FC, LT, 
             SUM(CASE WHEN ORDERTYPE = 'domestic' THEN "Output_FreightOptQty" ELSE 0 END) AS DOM_ORDERQTY, 
             SUM(CASE WHEN ORDERTYPE = 'import' THEN "Output_FreightOptQty" ELSE 0 END) AS IMP_ORDERQTY
-        FROM inventorysandbox.dbo.RFP_OrderDecision_Daily RFP GROUP BY ITEMID, FC, LT) ORDERQTY on ORDERQTY.ITEMID = his.ITEMID AND ORDERQTY.FC = his.STATE AND ORDERQTY.LT = his.daysfromtoday
+        FROM inventorysandbox.dbo.RFP_Simulation_Daily_OrderDecision RFP GROUP BY ITEMID, FC, LT) ORDERQTY on ORDERQTY.ITEMID = his.ITEMID AND ORDERQTY.FC = his.STATE AND ORDERQTY.LT = his.daysfromtoday
         WHERE prod.PROCUREMENTSTATUS = 'Replenish' 
           AND prod.CURRENTSUPPLIERPROCUREMENTSTATUS = 'Replenish' 
           AND his.datevalue <= (current_date() + 365)
@@ -757,7 +763,7 @@ create or replace temp table fc_data as (
 alter warehouse IBOPTIMIZATION_WH set warehouse_size = xsmall;  
 
 -----------------(Step 17) Final Output, Final Network Level QoH Adjustment-------------
--- INSERT INTO inventorysandbox.dbo.RFP_InventoryModelDomestic (
+-- INSERT INTO inventorysandbox.dbo.RFP_Simulation_Daily_InventoryModelDomestic (
 --     partnumber,
 --     itemid,
 --     state,
@@ -782,7 +788,7 @@ alter warehouse IBOPTIMIZATION_WH set warehouse_size = xsmall;
 --     lastmodified
 -- )
 
-create or replace table inventorysandbox.dbo.RFP_InventoryModelCombined_Daily as (
+create or replace table inventorysandbox.dbo.RFP_Simulation_Daily_InventoryModelCombined as (
         select 
         	prod.partnumber,
         	v4.itemid,
@@ -836,9 +842,10 @@ create or replace table inventorysandbox.dbo.RFP_InventoryModelCombined_Daily as
                         from lakehouse.spreedw_dim.product) Select ITEMID, CASE WHEN (IMPORT_ITEM = 'N' AND DOMESTIC_ITEM = 'N') THEN 'domestic' WHEN IMPORT_ITEM = 'Y' THEN 'import' ELSE 'domestic' END as ORDERTYPE FROM Setup
                         ) IMP_DOM_STATUS on IMP_DOM_STATUS.ITEMID = v4.itemid
             );
-execute task AOG_DoSGen_Simulation_Daily;
 
-END;
+execute task inventorysandbox.dbo.AOG_DoSGen_Simulation_Daily;
+
+END
 -----------------Drop previous tables-------------
 -- drop table if exists Unmet_Output_V5;
 -- drop table if exists QoH_Precent;
