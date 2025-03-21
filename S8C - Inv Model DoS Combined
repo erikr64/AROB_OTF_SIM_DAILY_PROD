@@ -1,3 +1,8 @@
+#UPDATE FROM TESTING -> CHANGE ALL .dbo to .DBO
+#DIFFERENCES FROM CURRENT:
+#   _Curr ent_ to _Simulation_Daily_
+#   Update the procedure name
+
 #Python Code Created by: Erik R
 #Code Last Updated: 10/28/2024
 #Procedure Name: Step_8C_RFPGen_Simulation_Daily
@@ -23,7 +28,6 @@ def main(session: snowpark.Session):
     # Gather Key Data Points
     # Basic Item Data Query Source
     ItemData = """
-        With InputOrderData as (
         Select
             ITEMID,
             SUPPLIERID,
@@ -31,51 +35,33 @@ def main(session: snowpark.Session):
             OTF,
             LT,
             SUM("Output_FreightOptQty") as Output_FreightOptQty
-        FROM INVENTORYSANDBOX.dbo.RFP_OrderDecision_Daily Output
+        FROM INVENTORYSANDBOX.dbo.RFP_Simulation_Daily_OrderDecision Output
         GROUP BY ITEMID, SUPPLIERID, ORDERTYPE, OTF, LT
-        )
-
-        Select
-            comb.ITEMID,
-            DAYSFROMTODAY,
-            OTF,
-            LT,
-            comb.ORDERTYPE,
-            SUM(NODEQOH) as NODEQOH,
-            SUM(TOTALRECEIPT) as TOTALRECEIPT,
-            Output_FreightOptQty,
-            SUM(FORECAST) as FORECAST,
-            SUM(ENDING_PREDICTIVEQOH) as ENDING_PREDICTIVEQOH
-        from inventorysandbox.dbo.RFP_InventoryModelCombined_Daily comb
-        INNER JOIN (Select MAX(GENERATEDON) as MAXDATE from inventorysandbox.dbo.RFP_InventoryModelCombined_Daily) MAXJOIN on MAXJOIN.MAXDATE = comb.GENERATEDON
-        LEFT JOIN InputOrderData on InputOrderData.ITEMID = comb.ITEMID AND InputOrderData.LT = comb.DAYSFROMTODAY AND InputOrderData.ORDERTYPE = comb.ORDERTYPE 
-        --WHERE comb.ITEMID = 398350
-        GROUP BY comb.ITEMID, DAYSFROMTODAY, comb.ORDERTYPE, OTF, LT, Output_FreightOptQty
     """
     df_ItemData = session.sql(ItemData)#.filter(col("ITEMID") == '81495')
 
-    # PredQoH = """
-    #     Select
-    #         ITEMID,
-    #         DAYSFROMTODAY,
-    #         ORDERTYPE,
-    #         SUM(NODEQOH) as NODEQOH,
-    #         SUM(TOTALRECEIPT) as TOTALRECEIPT,
-    #         SUM(FORECAST) as FORECAST,
-    #         SUM(ENDING_PREDICTIVEQOH) as ENDING_PREDICTIVEQOH
-    #     from inventorysandbox.dbo.RFP_InventoryModelCombined
-    #     INNER JOIN (Select MAX(GENERATEDON) as MAXDATE from inventorysandbox.dbo.RFP_InventoryModelCombined) MAXJOIN on MAXJOIN.MAXDATE = inventorysandbox.dbo.RFP_InventoryModelCombined.GENERATEDON
-    #     --WHERE ITEMID = 255178
-    #     GROUP BY ITEMID, DAYSFROMTODAY, ORDERTYPE
-    # """
-    # df_PredQoH = session.sql(PredQoH)#.filter(col("ITEMID") == '81495')
+    PredQoH = """
+        Select
+            ITEMID,
+            DAYSFROMTODAY,
+            ORDERTYPE,
+            SUM(NODEQOH) as NODEQOH,
+            SUM(TOTALRECEIPT) as TOTALRECEIPT,
+            SUM(FORECAST) as FORECAST,
+            SUM(ENDING_PREDICTIVEQOH) as ENDING_PREDICTIVEQOH
+        from INVENTORYSANDBOX.dbo.RFP_Simulation_Daily_InventoryModelCombined
+        INNER JOIN (Select MAX(GENERATEDON) as MAXDATE from INVENTORYSANDBOX.dbo.RFP_Simulation_Daily_InventoryModelCombined) MAXJOIN on MAXJOIN.MAXDATE = INVENTORYSANDBOX.dbo.RFP_Simulation_Daily_InventoryModelCombined.GENERATEDON
+        --WHERE ITEMID = 255178
+        GROUP BY ITEMID, DAYSFROMTODAY, ORDERTYPE
+    """
+    df_PredQoH = session.sql(PredQoH)#.filter(col("ITEMID") == '81495')
 
     #df_ItemData = df_ItemData.withColumn("DATEVALUE", date_add(current_date(), df_ItemData["LT"]))
-    df_PredQoH = df_ItemData.withColumn("ORDER_LAND_DATE", date_add(current_date(), df_ItemData["LT"]))
-                                        # ).withColumn('DAYSFROMTODAY', col('LT')
-                                        # )
+    df_ItemData = df_ItemData.withColumn("ORDER_LAND_DATE", date_add(current_date(), df_ItemData["LT"])
+                                        ).withColumn('DAYSFROMTODAY', col('LT')
+                                        )
 
-    # df_PredQoH = df_PredQoH.join(df_ItemData, on=['ITEMID', 'DAYSFROMTODAY', 'ORDERTYPE'], how='left')
+    df_PredQoH = df_PredQoH.join(df_ItemData, on=['ITEMID', 'DAYSFROMTODAY', 'ORDERTYPE'], how='left')
 
         #Cumulative Unmet Demand Post Order Land Date
     # Define the window specification with partitioning by ITEMID and FC, and ordering by DATEVALUE
@@ -133,9 +119,9 @@ def main(session: snowpark.Session):
     final_df = final_df.select('ITEMID', 'DAYSFROMTODAY', 'OTF', 'LT', 'NODEQOH', 'TOTALRECEIPT', 'NEW_ORDERQTY', 'FORECAST', 'TOTAL_FUTURE_FORECAST', 'ENDING_PREDICTIVEQOH', 'DAYSOFSUPPLY')
 
 
-    final_df.write.mode("overwrite").save_as_table('inventorysandbox.dbo.RFP_InventoryModelCombined_DOS_Daily')
+    final_df.write.mode("overwrite").save_as_table('INVENTORYSANDBOX.dbo.RFP_Simulation_Daily_InventoryModelCombined_DOS')
 
-    # return final_df.filter(col("NEW_ORDERQTY") > 0)
+    #return final_df
 
     return(session.create_dataframe([1]))
 
