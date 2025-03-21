@@ -24,7 +24,7 @@ create or replace task Step_1A_RFPGen_Simulation_Daily
     -- FROM lakehouse.spreedw_dim.product prod
     --     LEFT JOIN LAKEHOUSE.PROCUREMENT_ORDERING.PRODUCT PRODUCT ON PRODUCT.ITEMID = prod.ITEMID
     WHERE 
-        PROCUREMENTSTATUS = 'Replenish'
+        PROCUREMENTSTATUS <> 'Not Specified'
         -- prod.PROCUREMENTSTATUS = 'Replenish' 
         -- AND prod.CURRENTSUPPLIERPROCUREMENTSTATUS = 'Replenish' 
     
