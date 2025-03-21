@@ -1,4 +1,4 @@
---UPDATE FROM TESTING -> CHANGE ALL .TESTING to .DBO
+--UPDATE FROM TESTING -> CHANGE ALL .dbo to .DBO
 --DIFFERENCES FROM DAILY:
     --Comment out steps 8A-B & final execute command
     --Directly call step 7C from AOG_Orch_Simulation_B
@@ -13,20 +13,20 @@ create or replace task AOG_Orch_Simulation_Daily
     warehouse = INVENTORYMODEL_WH
     as begin
 
-call inventorysandbox.testing.Step_1B_RFPGen_Simulation_Daily();
-call inventorysandbox.testing.Step_2_RFPGen_Simulation_Daily();
+call inventorysandbox.dbo.Step_1B_RFPGen_Simulation_Daily();
+call inventorysandbox.dbo.Step_2_RFPGen_Simulation_Daily();
 execute task Step_2B_RFPGen_Simulation_Daily;
 
 END;
 
-create or replace task inventorysandbox.testing.AOG_Orch_Simulation_B_Daily
+create or replace task inventorysandbox.dbo.AOG_Orch_Simulation_B_Daily
     warehouse = INVENTORYMODEL_WH
     as begin
     
-call inventorysandbox.testing.Step_2C_RFPGen_Simulation_Daily(); --1m 40s
-call inventorysandbox.testing.Step_2D_RFPGen_Simulation_Daily(); --1m 30s
-call inventorysandbox.testing.Step_3_RFPGen_Simulation_Daily(); --25s
-call inventorysandbox.testing.Step_4_RFPGen_Simulation_Daily(); --15s
+call inventorysandbox.dbo.Step_2C_RFPGen_Simulation_Daily(); --1m 40s
+call inventorysandbox.dbo.Step_2D_RFPGen_Simulation_Daily(); --1m 30s
+call inventorysandbox.dbo.Step_3_RFPGen_Simulation_Daily(); --25s
+call inventorysandbox.dbo.Step_4_RFPGen_Simulation_Daily(); --15s
 execute task Step_7C_RFPGen_Simulation_Daily;
 
 END;
@@ -39,12 +39,12 @@ END;
 CREATE OR REPLACE TASK AOG_DoSGen_Simulation_Daily
     WAREHOUSE = INVENTORYMODEL_WH
     AS BEGIN
--- CALL inventorysandbox.testing.Step_8A_RFPGen_Simulation_Daily();
--- CALL inventorysandbox.testing.Step_8B_RFPGen_Simulation_Daily();
-CALL inventorysandbox.testing.Step_8C_RFPGen_Simulation_Daily();
-CALL inventorysandbox.testing.Step_8D_RFPGen_Simulation_Daily();
---CALL inventorysandbox.testing.AOG_SIMULATION_DECISION();
--- execute task INVENTORYSANDBOX.testing.RFP_GEN_POWERBI_DATASET;
+-- CALL inventorysandbox.dbo.Step_8A_RFPGen_Simulation_Daily();
+-- CALL inventorysandbox.dbo.Step_8B_RFPGen_Simulation_Daily();
+CALL inventorysandbox.dbo.Step_8C_RFPGen_Simulation_Daily();
+CALL inventorysandbox.dbo.Step_8D_RFPGen_Simulation_Daily();
+--CALL inventorysandbox.dbo.AOG_SIMULATION_DECISION();
+-- execute task INVENTORYSANDBOX.dbo.RFP_GEN_POWERBI_DATASET;
 END;
 
 
