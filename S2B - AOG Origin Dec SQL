@@ -835,7 +835,7 @@ LEFT JOIN IBOptUse IB_OPT on IB_OPT.ITEMID = AGG_OUTPUT.ITEMID AND IB_OPT.FC = A
 -- Select * from FC_ORIGIN_8 WHERE ITEMID = 74689
 
 
-execute task inventorysandbox.dbo.AOG_Orch_Simulation_Daily_B;
+execute task inventorysandbox.dbo.AOG_Orch_Simulation_B_Daily;
 
 END;
 
