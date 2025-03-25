@@ -2,7 +2,7 @@
 -- DIFFERENCES FROM CURRENT:
 --     _Curr ent to _Simulation_Daily
 
--- Last Update: 3/20/2025 @10:15am
+-- Last Update: 3/25/2025 @10:45am
 
 create or replace task Step_2B_RFPGen_Simulation_Daily
     warehouse = INVENTORYMODEL_WH
@@ -23,7 +23,7 @@ create or replace task Step_2B_RFPGen_Simulation_Daily
 ------------------------------------------------------------------------------------------------------------------
 create or replace temp table FIFO_COST as (
 Select * from LAKEHOUSE.FINANCE_COSTING.FIFOCACHE Fifo
-INNER JOIN (Select max(DM_UPDATEDON) as MaxDate from LAKEHOUSE.FINANCE_COSTING.FIFOCACHE) as MaxDate on MaxDate.MaxDate = Fifo.DM_UPDATEDON
+-- INNER JOIN (Select max(DM_UPDATEDON) as MaxDate from LAKEHOUSE.FINANCE_COSTING.FIFOCACHE) as MaxDate on MaxDate.MaxDate = Fifo.DM_UPDATEDON
 --Where ITEMID = 243726
 );
 
@@ -56,6 +56,61 @@ GROUP BY ITEMID, UPDATED_ORDERTYPE, OTF, LT
 HAVING SUM(CAP_ORDERQTY_USED) <= 0
 );
 
+
+-- --New added 3/25/2025
+create or replace temp table FC_CASEROUND as (
+Select
+    ITEMID,
+    FC,
+    UPDATED_ORDERTYPE,
+    OTF,
+    LT,
+    RFP_ITERATION_COUNT,
+    (round(CAP_ORDERQTY_USED / GREATEST(1, CASEQUANTITY)) * GREATEST(1, CASEQUANTITY)) as CASEROUND_V1
+FROM inventorysandbox.dbo.RFP_Simulation_Daily_ordering_sim
+-- WHERE ITEMID = 397185 AND OTF = 49
+);
+
+create or replace temp table FC_CASEROUND_SUM as (
+Select
+    ITEMID,
+    UPDATED_ORDERTYPE,
+    OTF,
+    LT,
+    RFP_ITERATION_COUNT,
+    SUM(CASEROUND_V1) as CASEROUND_V1
+FROM FC_CASEROUND
+GROUP BY ITEMID, UPDATED_ORDERTYPE, OTF, LT, RFP_ITERATION_COUNT
+);
+
+create or replace temp table CASEROUND_DELTA as (
+Select
+    sim.ITEMID,
+    sim.UPDATED_ORDERTYPE,
+    sim.OTF,
+    sim.LT,
+    sim.RFP_ITERATION_COUNT,
+    sim.CASEQUANTITY,
+    MAX(CASEROUND_V1) as CASEROUND_V1,
+    (round(SUM(sim.CAP_ORDERQTY_USED) / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) as CASEROUND_NETWORK_V1,
+    (MAX(CASEROUND_V1) - (round(SUM(sim.CAP_ORDERQTY_USED) / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY))) / GREATEST(1, sim.CASEQUANTITY) as CASEPACKDELTA
+FROM inventorysandbox.dbo.RFP_Simulation_Daily_ordering_sim sim
+LEFT JOIN FC_CASEROUND_SUM on FC_CASEROUND_SUM.ITEMID = sim.ITEMID AND FC_CASEROUND_SUM.UPDATED_ORDERTYPE = sim.UPDATED_ORDERTYPE AND FC_CASEROUND_SUM.OTF = sim.OTF AND FC_CASEROUND_SUM.LT = sim.LT AND FC_CASEROUND_SUM.RFP_ITERATION_COUNT = sim.RFP_ITERATION_COUNT
+-- WHERE sim.ITEMID = 397185 AND sim.OTF = 49
+GROUP BY sim.ITEMID, sim.UPDATED_ORDERTYPE, sim.OTF, sim.LT, sim.RFP_ITERATION_COUNT, sim.CASEQUANTITY
+);
+
+create or replace temp table ADDBACK_SIMSETUP as (
+Select
+    sim.*,
+    CASE WHEN ABS(CASEPACKDELTA) < RANK() OVER (PARTITION BY sim.ITEMID, sim.UPDATED_ORDERTYPE, sim.OTF, sim.LT, sim.RFP_ITERATION_COUNT ORDER BY (CAP_ORDERQTY_USED + (UNIFORM( 0, 100000, random()) / 1000000)) DESC) THEN 0
+        WHEN CASEPACKDELTA < 0 THEN sim.CASEQUANTITY ELSE -sim.CASEQUANTITY END as CASEPACK_ADJUST
+FROM inventorysandbox.dbo.RFP_Simulation_Daily_ordering_sim sim
+LEFT JOIN CASEROUND_DELTA on CASEROUND_DELTA.ITEMID = sim.ITEMID AND CASEROUND_DELTA.UPDATED_ORDERTYPE = sim.UPDATED_ORDERTYPE AND CASEROUND_DELTA.OTF = sim.OTF AND CASEROUND_DELTA.LT = sim.LT AND CASEROUND_DELTA.RFP_ITERATION_COUNT = sim.RFP_ITERATION_COUNT
+-- WHERE sim.ITEMID = 397185 AND sim.OTF = 49
+);
+--End of new added 3/25/2025
+
 create or replace temp table ADDBACK as (
 Select
     CAST(sim.ITEMID AS VARCHAR(50)) as ITEMID, sim.SUPPLIERID, FC,
@@ -77,21 +132,21 @@ Select
     CAP_ORDERQTY_USED as Output_OrderQty_ItemMOQ,
     IFNULL(CAP_ORDERQTY_USED * FIFOAVERAGECOST, 0) as Output_OrderCost_ItemMOQ,
     'round' as Case_RoundType,
-    (round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) as Output_CaseRoundQty,
-    IFNULL((round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) * FIFOAVERAGECOST, 0) as Output_CaseRoundCost,
+    (round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) + CASEPACK_ADJUST as Output_CaseRoundQty,
+    IFNULL(((round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) + CASEPACK_ADJUST) * FIFOAVERAGECOST, 0) as Output_CaseRoundCost,
     null as Item_Pallet_Type,
     null as Item_Pallet_Constraint,
     0 as Item_Pallet_TotalRound,
-    (round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) as Output_ItemPalletQty,
-    IFNULL((round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) * FIFOAVERAGECOST, 0) as Output_ItemPalletCost,
+    (round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) + CASEPACK_ADJUST as Output_ItemPalletQty,
+    IFNULL(((round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) + CASEPACK_ADJUST) * FIFOAVERAGECOST, 0) as Output_ItemPalletCost,
     null as Brand_MOV_Type,
     null as Brand_MOV_Used,
     0 as MOV_RoundUnits,
     0 as MOV_ReqRoundAdd_Pallet,
-    (round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) as Output_BrandMOVQty,
-    IFNULL((round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) * FIFOAVERAGECOST, 0) as Output_BrandMOVCost,
+    (round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) + CASEPACK_ADJUST as Output_BrandMOVQty,
+    IFNULL(((round(CAP_ORDERQTY_USED / GREATEST(1, sim.CASEQUANTITY)) * GREATEST(1, sim.CASEQUANTITY)) + CASEPACK_ADJUST) * FIFOAVERAGECOST, 0) as Output_BrandMOVCost,
     "Last Modified"
-from inventorysandbox.dbo.RFP_Simulation_Daily_ordering_sim sim
+from ADDBACK_SIMSETUP sim
 LEFT JOIN FIFO_COST on FIFO_COST.ITEMID = sim.ITEMID
 LEFT JOIN LAKEHOUSE.PROCUREMENT_ORDERING.PRODUCT prod on prod.ITEMID = sim.ITEMID
 LEFT JOIN Constraint_Setup CON_ITEM ON CON_ITEM.ITEMID = sim.ITEMID AND CON_ITEM.ORDERTYPE = sim.ordertype
