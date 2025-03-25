@@ -12,7 +12,7 @@
     # WHERE RFP.LT_TYPE = 'BASE' AND RFP.OTF <= 70 --AND RFP.supplierid = 386 AND RFP.ordertype = 'domestic'
 
 #Python Code Created by: Erik R
-#Code Last Updated: 3/20/2025 @ 2:30pm
+#Code Last Updated: 3/25/2025 @ 9:40am
 #Procedure Name: Step_1B_RFPGen_Simulation_Daily
 #Code Guide Avail Here:
 
@@ -330,7 +330,9 @@ WITH ITEM_LIST as (
         ).withColumn('SafetyStock_Ordered', greatest(col('Zero'), col('SafetyStock') - col('QoH_After_OTF')))
 
     # Replace null or zero 'CASEQUANTITY' with 1
-    df_ItemPred = df_ItemPred.withColumn('CASEQUANTITY_NZ', when(col('CASEQUANTITY').isNull() | (col('CASEQUANTITY') == 0), lit(1)).otherwise(col('CASEQUANTITY')))
+        #Updated 3/25/2025 to remove the rounding for case pack from order gen to IB opt to allow for network rounding!
+    df_ItemPred = df_ItemPred.withColumn('CASEQUANTITY_NZ', lit(1))
+    # df_ItemPred = df_ItemPred.withColumn('CASEQUANTITY_NZ', when(col('CASEQUANTITY').isNull() | (col('CASEQUANTITY') == 0), lit(1)).otherwise(col('CASEQUANTITY')))
 
     # Baseline Order Qty
     df_ItemPred = df_ItemPred.withColumn('BaselineOrderQty', col('CASEQUANTITY_NZ') * snow_round((col('SafetyStock_Ordered') + col('OTF_Unmet')) / col('CASEQUANTITY_NZ')))
