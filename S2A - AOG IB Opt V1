@@ -3,7 +3,7 @@
 #     _Curr ent to _Simulation_Daily
 
 #Python Code Created by: Erik R
-#Code Last Updated: 3/20/2025 @10:15am
+#Code Last Updated: 3/25/2025 @10:15am
 #Procedure Name: Step_2_RFPGen_Simulation_Daily
 #Code Guide Avail Here:
 #Procedure Operation:
@@ -480,12 +480,32 @@ def main(session: snowpark.Session):
 
 
     df_InputData['Case_RoundType'] = np.where((df_InputData['Item_Constraint_Used'] >= (df_InputData['Constraint_Total_Applicable']*.95)) & (df_InputData['Item_Constraint_Used'] > 0), 'Roundup', 'Round')
-    df_InputData['Output_CaseRoundQty'] = np.where(df_InputData['Case_RoundType'] == 'Roundup', 
+    df_InputData['Network_CasePackCount'] = np.round(df_InputData.groupby(['ITEMID', 'UPDATED_ORDERTYPE', 'OTF', 'LT', 'CAP_DOS'])['Output_OrderQty_ItemMOQ'].transform('sum') / df_InputData['CASEQUANTITY']) * df_InputData['CASEQUANTITY']
+    
+    df_InputData['CaseRoundQty_V1'] = np.where(df_InputData['Case_RoundType'] == 'Roundup', 
                                           np.ceil(df_InputData['Output_OrderQty_ItemMOQ'] / df_InputData['CASEQUANTITY']) * df_InputData['CASEQUANTITY'], 
                                           np.round(df_InputData['Output_OrderQty_ItemMOQ'] / df_InputData['CASEQUANTITY']) * df_InputData['CASEQUANTITY'])
+
+    df_InputData['Network_CasePackCount_V1'] = np.round(df_InputData.groupby(['ITEMID', 'UPDATED_ORDERTYPE', 'OTF', 'LT', 'CAP_DOS'])['CaseRoundQty_V1'].transform('sum') / df_InputData['CASEQUANTITY']) * df_InputData['CASEQUANTITY']
+    
+    df_InputData['Network_CasePackCount_Variance'] = (df_InputData['Network_CasePackCount_V1']  - df_InputData['Network_CasePackCount']) / df_InputData['CASEQUANTITY']
+
+    df_InputData['Output_OrderQty_ItemMOQ_rand'] = np.where(df_InputData['Output_OrderQty_ItemMOQ'] == 0, 0, df_InputData['Output_OrderQty_ItemMOQ'] + df_InputData.apply(lambda row: random.uniform(0, 0.25), axis=1))
+    df_InputData['FC_OrderRank'] = np.where(df_InputData['Output_OrderQty_ItemMOQ_rand'] == 0, 99, df_InputData.groupby(['ITEMID', 'SUPPLIERID', 'UPDATED_ORDERTYPE', 'OTF', 'LT', 'CAP_DOS'])['Output_OrderQty_ItemMOQ_rand'].rank(method='dense', ascending=False))
+
+    df_InputData['CasePackAdjust'] = np.where(df_InputData['FC_OrderRank'] > np.abs(df_InputData['Network_CasePackCount_Variance']), 0,
+                                              np.where(df_InputData['Network_CasePackCount_Variance'] < 0, df_InputData['CASEQUANTITY'], -df_InputData['CASEQUANTITY']))
+    
+    
+    df_InputData['Output_CaseRoundQty'] = df_InputData['CaseRoundQty_V1'] + df_InputData['CasePackAdjust']
     df_InputData['Output_CaseRoundCost'] = df_InputData['Output_CaseRoundQty'] * df_InputData['FIFOAVERAGECOST']
     df_InputData['Output_CaseRoundQty'].fillna(0, inplace=True)
     df_InputData['Output_CaseRoundCost'].fillna(0, inplace=True)
+
+    df_InputData = df_InputData.drop(columns=['Network_CasePackCount', 'CaseRoundQty_V1', 'Network_CasePackCount_V1', 'Output_OrderQty_ItemMOQ_rand', 'FC_OrderRank'])
+
+    # df_InputData = session.create_dataframe(df_InputData)
+    # return df_InputData.filter(col("ITEMID") == 203758);
 
 ################
 #END OF ITEM CASE PACK
