@@ -121,7 +121,7 @@ def main(session: snowpark.Session):
         #Pull Item Cost
     ItemCost = """
         Select * from LAKEHOUSE.FINANCE_COSTING.FIFOCACHE Fifo
-        INNER JOIN (Select max(DM_UPDATEDON) as MaxDate from LAKEHOUSE.FINANCE_COSTING.FIFOCACHE) as MaxDate on MaxDate.MaxDate = Fifo.DM_UPDATEDON
+        --INNER JOIN (Select max(DM_UPDATEDON) as MaxDate from LAKEHOUSE.FINANCE_COSTING.FIFOCACHE) as MaxDate on MaxDate.MaxDate = Fifo.DM_UPDATEDON
         --Where ITEMID = 243726
         """
     ItemCost = session.sql(ItemCost)
